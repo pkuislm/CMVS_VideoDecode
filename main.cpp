@@ -726,6 +726,8 @@ void decompressCMVFrame(ARGBPixel** pBitsArr, const int* PitsArr, byte* const fr
 
                     //别问，问就是我也看不懂
                     //整理、复制DCT后的数据到目标区域内
+                    //暂时不能用，因为不知道YCbCr怎么转过来的
+
                     /*for(uint y = 0; y < 16; ++y)
                     {
                         for(uint x = 0; x < 4; ++x)
@@ -1021,7 +1023,7 @@ bool writeCMVFramesAVI(std::ifstream &cmvFile, cmvVideo* cmv, const std::string&
         fConvert(cmv->head.frame_height, cmv->head.frame_width, bimage, pBits, &image, uWidth);
 
         //转换为jpg
-        //如果要编码成mjpg那还再转换色彩空间干啥，直接dct不就好了
+        //如果要编码成mjpg那还再转换色彩空间干啥，直接dct不就好了(
         RGBToYCbCr(image);
 
         forwardDCT(image);
