@@ -710,7 +710,7 @@ void decompressCMVFrame(ARGBPixel** pBitsArr, const int* PitsArr, byte* const fr
                     DCT(Pix[0][1][1]);
 
                     //色度通道的处理，每单元16*16
-                    //但处理之前，仍按照8x8存放，处理时再拓展到16x16
+                    //但处理时，仍按照8x8存放，稍后再拓展到16x16
                     //YUV4:2:0？
                     //Cb
                     DCT(Pix[1][0][0]);
