@@ -1,0 +1,13 @@
+E:/GalGames_Work/zlib-1.2.12/cmake-build-release/CMakeFiles/minigzip64.dir
+E:/GalGames_Work/zlib-1.2.12/cmake-build-release/CMakeFiles/zlib.dir
+E:/GalGames_Work/zlib-1.2.12/cmake-build-release/CMakeFiles/zlibstatic.dir
+E:/GalGames_Work/zlib-1.2.12/cmake-build-release/CMakeFiles/example.dir
+E:/GalGames_Work/zlib-1.2.12/cmake-build-release/CMakeFiles/minigzip.dir
+E:/GalGames_Work/zlib-1.2.12/cmake-build-release/CMakeFiles/example64.dir
+E:/GalGames_Work/zlib-1.2.12/cmake-build-release/CMakeFiles/test.dir
+E:/GalGames_Work/zlib-1.2.12/cmake-build-release/CMakeFiles/edit_cache.dir
+E:/GalGames_Work/zlib-1.2.12/cmake-build-release/CMakeFiles/rebuild_cache.dir
+E:/GalGames_Work/zlib-1.2.12/cmake-build-release/CMakeFiles/list_install_components.dir
+E:/GalGames_Work/zlib-1.2.12/cmake-build-release/CMakeFiles/install/local.dir
+E:/GalGames_Work/zlib-1.2.12/cmake-build-release/CMakeFiles/install.dir
+E:/GalGames_Work/zlib-1.2.12/cmake-build-release/CMakeFiles/install/strip.dir

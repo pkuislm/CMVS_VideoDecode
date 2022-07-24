@@ -1,0 +1,106 @@
+{
+	"configurations" : 
+	[
+		{
+			"directories" : 
+			[
+				{
+					"build" : ".",
+					"hasInstallRule" : true,
+					"jsonFile" : "directory-.-Release-4e2b4594733c7b0d26de.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "2.4.4"
+					},
+					"projectIndex" : 0,
+					"source" : ".",
+					"targetIndexes" : 
+					[
+						0,
+						1,
+						2,
+						3,
+						4,
+						5
+					]
+				}
+			],
+			"name" : "Release",
+			"projects" : 
+			[
+				{
+					"directoryIndexes" : 
+					[
+						0
+					],
+					"name" : "zlib",
+					"targetIndexes" : 
+					[
+						0,
+						1,
+						2,
+						3,
+						4,
+						5
+					]
+				}
+			],
+			"targets" : 
+			[
+				{
+					"directoryIndex" : 0,
+					"id" : "example::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-example-Release-20dd6a8772b33b0ccb56.json",
+					"name" : "example",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "example64::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-example64-Release-a5158fe713c9d96ce72b.json",
+					"name" : "example64",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "minigzip::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-minigzip-Release-8b849c464a3c177c0390.json",
+					"name" : "minigzip",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "minigzip64::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-minigzip64-Release-93f261b753753d0c1bd7.json",
+					"name" : "minigzip64",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "zlib::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-zlib-Release-1f56084857ff460cf69e.json",
+					"name" : "zlib",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "zlibstatic::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-zlibstatic-Release-29afce142b8b3187794f.json",
+					"name" : "zlibstatic",
+					"projectIndex" : 0
+				}
+			]
+		}
+	],
+	"kind" : "codemodel",
+	"paths" : 
+	{
+		"build" : "E:/GalGames_Work/zlib-1.2.12/cmake-build-release",
+		"source" : "E:/GalGames_Work/zlib-1.2.12"
+	},
+	"version" : 
+	{
+		"major" : 2,
+		"minor" : 3
+	}
+}

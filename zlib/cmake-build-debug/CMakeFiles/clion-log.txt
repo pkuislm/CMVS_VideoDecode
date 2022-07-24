@@ -1,0 +1,12 @@
+"C:\Program Files\JetBrains\CLion 2021.3\bin\cmake\win\bin\cmake.exe" -DCMAKE_BUILD_TYPE=Debug "-DCMAKE_MAKE_PROGRAM=C:/Program Files/JetBrains/CLion 2021.3/bin/ninja/win/ninja.exe" -G Ninja E:\GalGames_Work\zlib-1.2.12
+CMake Deprecation Warning at CMakeLists.txt:1 (cmake_minimum_required):
+  Compatibility with CMake < 2.8.12 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value or use a ...<max> suffix to tell
+  CMake that the project does not need compatibility with older versions.
+
+
+-- Configuring done
+-- Generating done
+-- Build files have been written to: E:/GalGames_Work/zlib-1.2.12/cmake-build-debug

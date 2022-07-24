@@ -1,0 +1,23 @@
+cmake_minimum_required(VERSION 3.21)
+project(CMVDecode)
+
+set(CMAKE_CXX_STANDARD 14)
+set(ZLIB_ROOT "zlib")
+set(PNG_ROOT "libpng")
+set(CMAKE_EXE_LINKER_FLAGS "-static")
+
+if(CMAKE_BUILD_TYPE AND (CMAKE_BUILD_TYPE STREQUAL "Release"))
+    set(ZLIB_LIBRARY "zlib/lib/release")
+    set(PNG_LIBRARY "libpng/lib/release")
+    find_library(ZLIB_LIB libzlibstatic.a ${ZLIB_LIBRARY})
+    find_library(PNG_LIB libpng16.a ${PNG_LIBRARY})
+else()
+    set(ZLIB_LIBRARY "zlib/lib/debug")
+    set(PNG_LIBRARY "libpng/lib/debug")
+    find_library(ZLIB_LIB libzlibstatic.a ${ZLIB_LIBRARY})
+    find_library(PNG_LIB libpng16d.a ${PNG_LIBRARY})
+endif()
+
+add_executable(CMVDecode main.cpp jpg.cpp avi.cpp)
+target_link_libraries(CMVDecode ${PNG_LIB})
+target_link_libraries(CMVDecode ${ZLIB_LIB})
