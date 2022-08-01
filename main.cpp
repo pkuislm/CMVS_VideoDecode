@@ -753,6 +753,7 @@ void decompressCMVFrame(ARGBPixel** pBitsArr, const int* PitsArr, byte* const fr
 
                     //别问，问就是我也看不懂
                     //整理、复制DCT后的数据到目标区域内
+                    //暂时不能用，因为CbCr通道的处理可能不正确
                    /* for(uint y = 0; y < 16; ++y)
                     {
                         for(uint x = 0; x < 4; ++x)
