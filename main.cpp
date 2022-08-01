@@ -16,21 +16,22 @@ typedef union  __declspec(aligned(8)) __m64_i{
     __int32             m64_i32[2];
     __int64             m64_i64;
     unsigned __int32    m64_u32[2];
+    short               m64_i16[4];
     unsigned char       m64_u8[8];
 } __m64_i;
 
 struct ARGBPixel{
     union{
-        byte r;
-        byte V;
+        short r;
+        short V;
     };
     union{
-        byte g;
-        byte U;
+        short g;
+        short U;
     };
     union{
-        byte b;
-        byte Y;
+        short b;
+        short Y;
     };
     byte a;
 };
@@ -137,7 +138,7 @@ int mmxOpCIndex[] = {
         8,32,24,16
 };
 static int huff_tbl[1024];
-static int tab3[128]{ 0 };
+static int skipZeros[128]{0 };
 #pragma endregion
 
 #ifdef useless
@@ -446,48 +447,60 @@ public:
         current = *pos;
         bitShift = 0;
     }
+    int get_num(uint bits)
+    {
+        int ret = 0;
+        for(uint j = bits; j > 0; --j)
+        {
+            ret = (ret << 1) | get_bit();
+        }
+        return ret;
+    }
 };
 
 int MakeTree(int size, int* arr){
-    int tmp[102]{ 0 };
+    //int tmp[102]{ 0 };
     memset(huff_tbl, 0, 4096);
     for(int i = -size;; --i){
         int index_small = 0;
         int index_small2 = -100;
         int val_small = 0x7D2B74FF;
-        for(int k = 0; k < size; ++k){
+        for(int k = 0; k < size; ++k){//找到数组里最小的数
             if(arr[k] < val_small){
                 index_small = k;
                 val_small = arr[k];
             }
         }
         val_small = 0x7D2B74FF;
-        for(int l = 0; l < size; ++l){
+        for(int l = 0; l < size; ++l){//找到数组里第二小的数
             if(l != index_small && arr[l] < val_small){
                 index_small2 = l;
                 val_small = arr[l];
             }
         }
-        if(index_small < 0 || index_small2 < 0)
+        if(index_small < 0 || index_small2 < 0)//找不到最小值意味着树已经建完了
             break;
-        tmp[index_small] = size;
-        tmp[index_small2] = i;
-        huff_tbl[size] = index_small;
-        huff_tbl[size + 512] = index_small2;
+        //tmp[index_small] = size;
+        //tmp[index_small2] = i;
+        huff_tbl[size] = index_small;//树的左边
+        huff_tbl[size + 512] = index_small2;//树的右边
 
-        arr[size] = arr[index_small] + arr[index_small2];
+        arr[size] = arr[index_small] + arr[index_small2];//把两个节点的值相加组成新节点
         size ++;
-        arr[index_small] = 0x7D2B7500;
+        arr[index_small] = 0x7D2B7500;//删除组成新节点的两个节点
         arr[index_small2] = 0x7D2B7500;
     }
     return size;
 }
 
-int getTblValue(bitHelper &bh, int a1, int a2){
-    int result = a1 - 1;
-    while ( result >= a2 ){
-        result = huff_tbl[0x200 * bh.get_bit() + result];// 512 + x或者0 + x，对应奇偶数表
+int Search(bitHelper &bh, int end, int start){
+    //end是终止值
+    int result = end - 1;
+    //只要找到的节点值不在0~15之内，认为其不是叶节点并继续
+    while ( result >= start ){
+        result = huff_tbl[0x200 * bh.get_bit() + result];
     }
+    //返回找到的叶节点的值
     return result;
 }
 
@@ -504,9 +517,9 @@ void cutM64Arrs(__m64_i *src, __m64_i *dst, uint count){
     }
 }
 
-int getTabPos(bitHelper &bh)
+int getSkipCount(bitHelper &bh)
 {
-    int* pos = tab3;
+    int* pos = skipZeros;
     while ( bh.get_bit() ){
         ++pos;
     };
@@ -521,7 +534,6 @@ typedef __m64_i MCU[16];
 typedef MCU BCU[2][2];
 void decompressCMVFrame(ARGBPixel** pBitsArr, const int* PitsArr, byte* const frame, const int  frameSize, const int flag)
 {
-
     int* lpintData = reinterpret_cast<int *>(frame);
     bool hasExSection = false;
     jbpdInfo info{};
@@ -532,7 +544,7 @@ void decompressCMVFrame(ARGBPixel** pBitsArr, const int* PitsArr, byte* const fr
     BCU Pix[3];
     bitHelper bh;
 
-    //std::cout << sizeof(Pix);
+    //std::cout << sizeof(BCU);
     //initJBPDInfo(&info);
     //info.frameAddr = frame;
     info.width = *reinterpret_cast<short*>(reinterpret_cast<short*>(frame) + 8);
@@ -545,12 +557,14 @@ void decompressCMVFrame(ARGBPixel** pBitsArr, const int* PitsArr, byte* const fr
     byte* lpCurData = frame + (lpintData[1] + 4);
     uint jbpFlag = lpintData[2];
 
+    //freq是每种长度的编码出现的次数？
     memcpy(freq_dc, lpCurData, 64);
     memcpy(freq_ac, lpCurData + 64, 64);
     lpCurData += 128;
 
+    //读取一个数组，用来在解压AC系数时判断该跳过多少个系数
     for(uint i = 0; i < 16; ++i)
-        tab3[i] = lpCurData[i] + 1;
+        skipZeros[i] = lpCurData[i] + 1;
     lpCurData +=16;
 
     //两个量化表
@@ -558,8 +572,8 @@ void decompressCMVFrame(ARGBPixel** pBitsArr, const int* PitsArr, byte* const fr
     {
         for (uint i = 0; i < 64; ++i)
         {
-            info.quantizationTables[0].table[i] = lpCurData[zigZagMap[i]];
-            info.quantizationTables[1].table[i] = lpCurData[zigZagMap[i] + 64];
+            info.quantizationTables[0].table[i] = lpCurData[zigZagMap[i]];//明度量化表
+            info.quantizationTables[1].table[i] = lpCurData[zigZagMap[i] + 64];//色度量化表
         }
         lpCurData += 128;
     }
@@ -594,33 +608,31 @@ void decompressCMVFrame(ARGBPixel** pBitsArr, const int* PitsArr, byte* const fr
     if(!flag)
         hasExSection = false;
 
-    //从这里开始即将读取哈夫曼压缩数据
-    bh.resetRead(reinterpret_cast<int *>(lpCurData));
+    //解压下DC的全部值，并暂存起来
+    bh.resetRead(reinterpret_cast<int *>(lpCurData));//section_1 scan of DC values
 
-    int size = MakeTree(16, freq_dc);
+    int root = MakeTree(16, freq_dc);
 
-    uint v19 = 3 * (info.width / 16) * (info.height / 16);
-    uint v21 = v19 * 2;
-
-    int num;
-    for(uint i = 0; i < v21; ++i)
+    uint DCValCnt = (info.width / 16) * (info.height / 16) * 6;
+    //一共有多少DC值需要解压（明度通道是14400，每个色度通道是3600），一共21600
+    //上面的计算方式是按每个BCU都有6个DC值计算的
+    for(uint i = 0; i < DCValCnt; ++i)
     {
-        num = 0;
-        uint v24 = getTblValue(bh, size, 16);
-        for(uint j = v24; j > 0; --j)
-        {           //summary:获得这v24个bit，转换为int
-            num = (num << 1) | bh.get_bit();
-        }
-        if(num < (1 << ( v24 - 1)))
-            num -= (1 << v24) - 1;
+        uint length = Search(bh, root, 16);
+
+        int num = bh.get_num(length);
+
+        if(num < (1 << (length - 1)))
+            num -= (1 << length) - 1;
+
         dcValTmp[i] = static_cast<short>(num);
         if(i != 0)
             dcValTmp[i] = static_cast<short>(num + dcValTmp[i - 1]);
     }
 
-    bh.resetRead(reinterpret_cast<int *>(lpCurData + lpintData[7]));//第二个区段
+    bh.resetRead(reinterpret_cast<int *>(lpCurData + lpintData[7]));//section_2 scan of AC values
 
-    size = MakeTree(16, freq_ac);
+    root = MakeTree(16, freq_ac);
 
     short* pdcValTmp = dcValTmp;
     if(hasExSection && BCUCount)
@@ -658,39 +670,42 @@ void decompressCMVFrame(ARGBPixel** pBitsArr, const int* PitsArr, byte* const fr
                     auto* pPix = reinterpret_cast<short *>(Pix);
                     for(uint l = 0; l < 6; ++l)
                     {
-                        pPix[0] = info.quantizationTables[l >> 2].table[0] * *pdcValTmp;
+                        //YYYYUV
+                        //l >> 2 : 0~3(前四个MCU)用第一个量化表，4~5用色度量化表
+                        pPix[0] = info.quantizationTables[l >> 2].table[0] * *pdcValTmp;//MCU左上角的DC值
                         pdcValTmp++;
+
                         for(int m = 0; m < 63;)
                         {
-                            int v53 = getTblValue(bh, size, 16);
-                            num = 0;
-                            if(v53 == 0xF)
+                            int length = Search(bh, root, 16);
+
+                            if(length == 0xF)//在此之后系数全为0？
                                 break;
-                            if(v53)
+                            if(length)
                             {
-                                for(int n = v53; n > 0 ; --n)
-                                {
-                                    num = (num << 1) | bh.get_bit();
-                                }
-                                if(num < (1 << ( v53 - 1)))
-                                    num -= (1 << v53) - 1;
-                                pPix[zigZagMap_ex1[m]] = info.quantizationTables[l >> 2].table[m + 1] * num;
+                                int coefficient = bh.get_num(length);//get Coefficient
+
+                                if(coefficient < (1 << (length - 1)))//如果最高位bit为0
+                                    coefficient -= (1 << length) - 1;//减去在此长度最高位为1的数减1，得到的就是对应的负值
+
+                                pPix[zigZagMap_ex1[m]] = info.quantizationTables[l >> 2].table[m + 1] * coefficient;
                                 m++;
-                            }else
+                            }
+                            else//跳过一定数量的系数
                             {
-                                m += getTabPos(bh);
+                                //获得的数不可能是0
+                                m += getSkipCount(bh);
                             }
                         }
                         pPix += 64;//即已经填充16个 __m64
-                    }//循环一共填充 16 * 6 = 96 个 __m64
+                    }//循环一共填充 16 * 6 = 96 个 __m64 -> 一个BCU，包含4个明度通道以及2个色度通道
+
                     //移动一下，方便之后操作
                     cutM64Arrs(Pix[1][0][1], Pix[2][0][0], 16);
 
 
                     //Pix[i][x][y] -> __m64_i[16]
-                    //__m64[0], __m64[1] = //+.+. +.+. | +.+. +.+.
-                    //即每个__m64_i内只有一半的有效数据
-                    //所以__m64_i布局为2(列)x8(行)
+                    //__m64_i布局为2(列)x8(行),每个像素为signed short
 
                     //下面6次DCT共处理16x16的像素，即4个MCU
                     //这里各通道是分开存放的
@@ -717,50 +732,60 @@ void decompressCMVFrame(ARGBPixel** pBitsArr, const int* PitsArr, byte* const fr
                     //Cr
                     DCT(Pix[2][0][0]);
 
-
                     //这里除了进行色彩空间转换之外，还拷贝到了目标区域
                     cutM64Arrs(Pix[2][0][0], Pix[1][0][1], 16);
                     //             写入的地址             写入的大小          源
                     ycbcrToRGB(unit + unitTmp, unitSize, Pix[0][0][0]);
                     unitTmp += 64;
+                    /* MCU Cb, Cr;
+                    cutM64Arrs(Pix[1][0][0], Cb, 16);
+                    cutM64Arrs(Pix[2][0][0], Cr, 16);
+                    for(uint x = 0; x < 8; ++x)
+                    {
+                        for(uint y = 0; y < 2; ++y)
+                        {
+                            Pix[0][0][y/8][(x/2)*2].m64_i16[0] = Cb[(x*2)+y].m64_i16[0];
+                            Pix[0][0][y/8][(x/2)*2].m64_i16[2] = Cb[(x*2)+y].m64_i16[1];
+                            Pix[0][0][y/8][(x/2)*2 + 1].m64_i16[0] = Cb[(x*2)+y].m64_i16[2];
+                            Pix[0][0][y/8][(x/2)*2 + 1].m64_i16[2] = Cb[(x*2)+y].m64_i16[3];
+                        }
+                    }*/
 
                     //别问，问就是我也看不懂
                     //整理、复制DCT后的数据到目标区域内
-                    //暂时不能用，因为不知道YCbCr怎么转过来的
-
-                    /*for(uint y = 0; y < 16; ++y)
+                   /* for(uint y = 0; y < 16; ++y)
                     {
                         for(uint x = 0; x < 4; ++x)
                         {
                             uint pixelIndex = 4096 * j + 16 * k + 256 * y + 4 * x;
                             //y
-                            pBitsArr[i][pixelIndex + 0].Y = Pix[0][y / 8][x / 2][(y * 2) % 16 + x % 2].m64_u8[0];
-                            pBitsArr[i][pixelIndex + 1].Y = Pix[0][y / 8][x / 2][(y * 2) % 16 + x % 2].m64_u8[2];
-                            pBitsArr[i][pixelIndex + 2].Y = Pix[0][y / 8][x / 2][(y * 2) % 16 + x % 2].m64_u8[4];
-                            pBitsArr[i][pixelIndex + 3].Y = Pix[0][y / 8][x / 2][(y * 2) % 16 + x % 2].m64_u8[6];
+                            pBitsArr[i][pixelIndex + 0].Y = Pix[0][y / 8][x / 2][(y * 2) % 16 + x % 2].m64_i16[0];
+                            pBitsArr[i][pixelIndex + 1].Y = Pix[0][y / 8][x / 2][(y * 2) % 16 + x % 2].m64_i16[1];
+                            pBitsArr[i][pixelIndex + 2].Y = Pix[0][y / 8][x / 2][(y * 2) % 16 + x % 2].m64_i16[2];
+                            pBitsArr[i][pixelIndex + 3].Y = Pix[0][y / 8][x / 2][(y * 2) % 16 + x % 2].m64_i16[3];
 
                             //420
                             //Cb
-*//*                            pBitsArr[i][pixelIndex + 0].g = Pix[1][y / 8][x / 2][(y * 2) % 16 + x % 2].m64_u8[0];
-                            pBitsArr[i][pixelIndex + 1].g = Pix[1][y / 8][x / 2][(y * 2) % 16 + x % 2].m64_u8[2];
-                            pBitsArr[i][pixelIndex + 2].g = Pix[1][y / 8][x / 2][(y * 2) % 16 + x % 2].m64_u8[4];
-                            pBitsArr[i][pixelIndex + 3].g = Pix[1][y / 8][x / 2][(y * 2) % 16 + x % 2].m64_u8[6];
+*//*                            pBitsArr[i][pixelIndex + 0].g = Pix[1][y / 8][x / 2][(y * 2) % 16 + x % 2].m64_u16[0];
+                            pBitsArr[i][pixelIndex + 1].g = Pix[1][y / 8][x / 2][(y * 2) % 16 + x % 2].m64_u16[1];
+                            pBitsArr[i][pixelIndex + 2].g = Pix[1][y / 8][x / 2][(y * 2) % 16 + x % 2].m64_u16[2];
+                            pBitsArr[i][pixelIndex + 3].g = Pix[1][y / 8][x / 2][(y * 2) % 16 + x % 2].m64_u16[3];
                             //Cr
-                            pBitsArr[i][pixelIndex + 0].r = Pix[2][y / 8][x / 2][(y * 2) % 16 + x % 2].m64_u8[0];
-                            pBitsArr[i][pixelIndex + 1].r = Pix[2][y / 8][x / 2][(y * 2) % 16 + x % 2].m64_u8[2];
-                            pBitsArr[i][pixelIndex + 2].r = Pix[2][y / 8][x / 2][(y * 2) % 16 + x % 2].m64_u8[4];
-                            pBitsArr[i][pixelIndex + 3].r = Pix[2][y / 8][x / 2][(y * 2) % 16 + x % 2].m64_u8[6];*//*
+                            pBitsArr[i][pixelIndex + 0].r = Pix[2][y / 8][x / 2][(y * 2) % 16 + x % 2].m64_u16[0];
+                            pBitsArr[i][pixelIndex + 1].r = Pix[2][y / 8][x / 2][(y * 2) % 16 + x % 2].m64_u16[1];
+                            pBitsArr[i][pixelIndex + 2].r = Pix[2][y / 8][x / 2][(y * 2) % 16 + x % 2].m64_u16[2];
+                            pBitsArr[i][pixelIndex + 3].r = Pix[2][y / 8][x / 2][(y * 2) % 16 + x % 2].m64_u16[3];*//*
 
-                            //420转444
-                            *//*pBitsArr[i][pixelIndex + 0].U = Pix[1][0][0][jt[y]].m64_u8[2 * x];
-                            pBitsArr[i][pixelIndex + 1].U = Pix[1][0][0][jt[y]].m64_u8[2 * x];
-                            pBitsArr[i][pixelIndex + 2].U = Pix[1][0][0][jt[y]].m64_u8[2 * x];
-                            pBitsArr[i][pixelIndex + 3].U = Pix[1][0][0][jt[y]].m64_u8[2 * x];*//*
+                            //420嗯转444
+                            pBitsArr[i][pixelIndex + 0].U = Pix[1][0][0][jt[y]+x/2].m64_i16[0];
+                            pBitsArr[i][pixelIndex + 1].U = Pix[1][0][0][jt[y]+x/2].m64_i16[1];
+                            pBitsArr[i][pixelIndex + 2].U = Pix[1][0][0][jt[y]+x/2].m64_i16[2];
+                            pBitsArr[i][pixelIndex + 3].U = Pix[1][0][0][jt[y]+x/2].m64_i16[3];
 
-                            *//*pBitsArr[i][pixelIndex + 0].V = Pix[2][0][0][jt[y]].m64_u8[2 * x];
-                            pBitsArr[i][pixelIndex + 1].V = Pix[2][0][0][jt[y]].m64_u8[2 * x];
-                            pBitsArr[i][pixelIndex + 2].V = Pix[2][0][0][jt[y]].m64_u8[2 * x];
-                            pBitsArr[i][pixelIndex + 3].V = Pix[2][0][0][jt[y]].m64_u8[2 * x];*//*
+                            pBitsArr[i][pixelIndex + 0].V = Pix[2][0][0][jt[y]+x/2].m64_i16[0];
+                            pBitsArr[i][pixelIndex + 1].V = Pix[2][0][0][jt[y]+x/2].m64_i16[1];
+                            pBitsArr[i][pixelIndex + 2].V = Pix[2][0][0][jt[y]+x/2].m64_i16[2];
+                            pBitsArr[i][pixelIndex + 3].V = Pix[2][0][0][jt[y]+x/2].m64_i16[3];
                         }
                     }*/
                 }
@@ -774,33 +799,13 @@ void decompressCMVFrame(ARGBPixel** pBitsArr, const int* PitsArr, byte* const fr
 
 void YCC2RGBPix(ARGBPixel* Pixel)
 {
-
     int r;
     int g;
     int b;
-    // OpenCV YCrCb --> RGB
-    //b = Pixel->Y + 1.773*(Pixel->U-128);
-    //g = Pixel->Y - 0.714*(Pixel->V-128) - 0.344*(Pixel->U-128);
-    //r = Pixel->Y + 1.403*(Pixel->V-128);
 
-    // YUV-->RGB for HDTV(BT.601)
-    //b = Pixel->Y + 2.03211*(Pixel->U-128);
-    //g = Pixel->Y - 0.39465*(Pixel->U-128) - 0.5806*(Pixel->V-128);
-    //r = Pixel->Y + 1.13983*(Pixel->V-128);
-
-    // YUV-->RGB for HDTV(BT.709)
-    //b = Pixel->Y + 2.12798*(Pixel->U-128);
-    //g = Pixel->Y - 0.21482*(Pixel->U-128) - 0.38059*(Pixel->V-128);
-    //r = Pixel->Y + 1.28033*(Pixel->V-128);
-
-    // YCbCr-->RGB
-    //b = 1.164*(Pixel->Y-16) + 2.018*(Pixel->U-128);
-    //g = 1.164*(Pixel->Y-16) - 0.813*(Pixel->U-128) - 0.391*(Pixel->V-128);
-    //r = 1.164*(Pixel->Y-16) + 1.596*(Pixel->V-128);
-
-    b = Pixel->Y + 1.772f * Pixel->U                     + 128;
+    r = Pixel->Y + 1.772f * Pixel->U                     + 128;
     g = Pixel->Y - 0.344f * Pixel->U - 0.714f * Pixel->V + 128;
-    r = Pixel->Y                     + 1.402f * Pixel->V + 128;
+    b = Pixel->Y                     + 1.402f * Pixel->V + 128;
 
     if (r < 0)   r = 0;
     if (r > 255) r = 255;
@@ -828,7 +833,7 @@ void YCC2RGB(uint height, uint width, ARGBPixel** unitBuff, uint uWidth)
     }
 }
 
-void fConvert(uint height, uint width, byte* bimage, ARGBPixel** unitBuff, BMPImage * image, uint uWidth)
+void fConvert(uint height, uint width, short* bimage, ARGBPixel** unitBuff, BMPImage * image, uint uWidth)
 {
     uint imgindex = 0;
     for(uint y = 0; y < height; ++y){
@@ -961,7 +966,6 @@ bool writeCMVFramesAVI(std::ifstream &cmvFile, cmvVideo* cmv, const std::string&
 {
     byte* frame = nullptr;
     int* Pitch = nullptr;
-    byte* bimage = nullptr;
 
     uint uWidth = (cmv->head.frame_width + 255) / 256;
     uint uHeight = (cmv->head.frame_height + 255) / 256;
@@ -971,7 +975,7 @@ bool writeCMVFramesAVI(std::ifstream &cmvFile, cmvVideo* cmv, const std::string&
     auto pBits = new ARGBPixel*[uCount]{};
 
     //分配需要的内存
-    bimage = new byte[uCount * 0x30000];
+    auto bimage = new short[uCount * 0x30000];
     for(int i = 0; i < uCount; i++){
         //struct of D3DLOCKED_RECT
         Pitch[i] = 0x400;                       //256(长) * 4(通道)
@@ -1024,7 +1028,7 @@ bool writeCMVFramesAVI(std::ifstream &cmvFile, cmvVideo* cmv, const std::string&
 
         //转换为jpg
         //如果要编码成mjpg那还再转换色彩空间干啥，直接dct不就好了(
-        RGBToYCbCr(image);
+        //RGBToYCbCr(image);
 
         forwardDCT(image);
         quantize(image);
@@ -1093,7 +1097,7 @@ bool writeCMVFrame(std::ifstream &cmvFile, cmvVideo* cmv, const std::string& out
     //解压
     decompressCMVFrame(pBits, Pitch, frame, thisFrame.cmv_frame_size, 0);
     delete[] frame;
-    //YCC2RGB(cmv->head.frame_height, cmv->head.frame_width, pBits, uWidth);
+    YCC2RGB(cmv->head.frame_height, cmv->head.frame_width, pBits, uWidth);
 
     write_png_file(outFilename.c_str(), pBits, cmv->head.frame_height, cmv->head.frame_width, uWidth);
 
