@@ -8,6 +8,7 @@
 #include <io.h>
 #include <direct.h>
 #include <cassert>
+#include <limits>
 #include "libpng/png.h"
 //#define debug
 typedef union  __declspec(aligned(8)) __m64_i{
@@ -20,7 +21,7 @@ typedef union  __declspec(aligned(8)) __m64_i{
     unsigned char       m64_u8[8];
 } __m64_i;
 
-struct ARGBPixel{
+/*struct ARGBPixel{
     union{
         short r;
         short V;
@@ -32,6 +33,22 @@ struct ARGBPixel{
     union{
         short b;
         short Y;
+    };
+    byte a;
+};*/
+
+struct ARGBPixel{
+    union{
+        byte r;
+        byte V;
+    };
+    union{
+        byte g;
+        byte U;
+    };
+    union{
+        byte b;
+        byte Y;
     };
     byte a;
 };
@@ -459,7 +476,6 @@ public:
 };
 
 int MakeTree(int size, int* arr){
-    //int tmp[102]{ 0 };
     memset(huff_tbl, 0, 4096);
     for(int i = -size;; --i){
         int index_small = 0;
@@ -480,8 +496,6 @@ int MakeTree(int size, int* arr){
         }
         if(index_small < 0 || index_small2 < 0)//找不到最小值意味着树已经建完了
             break;
-        //tmp[index_small] = size;
-        //tmp[index_small2] = i;
         huff_tbl[size] = index_small;//树的左边
         huff_tbl[size + 512] = index_small2;//树的右边
 
@@ -539,25 +553,19 @@ void decompressCMVFrame(ARGBPixel** pBitsArr, const int* PitsArr, byte* const fr
     jbpdInfo info{};
     int freq_dc[32]{ 0 };
     int freq_ac[32]{ 0 };
-    short dcValTmp[32768]{ 0 };
+    short dcTmp[32768]{0 };
     //我知道，我知道。这里浪费了不少空间。但这也是为了下面的步骤好看（
     BCU Pix[3];
     bitHelper bh;
 
-    //std::cout << sizeof(BCU);
-    //initJBPDInfo(&info);
-    //info.frameAddr = frame;
     info.width = *reinterpret_cast<short*>(reinterpret_cast<short*>(frame) + 8);
     info.height = *reinterpret_cast<short*>(reinterpret_cast<short*>(frame) + 9);
-    //info.frameSize = frameSize;
-    //info.colorBits = 32;
-    //GetInfoFromFrameFlag(&info);
 
     //lpCurData = frame[frame->headerSize + 4]，frame->headerSize : offset = 4， 指向freq_dc起始处
     byte* lpCurData = frame + (lpintData[1] + 4);
     uint jbpFlag = lpintData[2];
 
-    //freq是每种长度的编码出现的次数？
+    //freq是每种长度的编码出现的次数
     memcpy(freq_dc, lpCurData, 64);
     memcpy(freq_ac, lpCurData + 64, 64);
     lpCurData += 128;
@@ -567,7 +575,7 @@ void decompressCMVFrame(ARGBPixel** pBitsArr, const int* PitsArr, byte* const fr
         skipZeros[i] = lpCurData[i] + 1;
     lpCurData +=16;
 
-    //两个量化表
+    //读取两个量化表
     if(jbpFlag & 0x8000000)
     {
         for (uint i = 0; i < 64; ++i)
@@ -619,22 +627,20 @@ void decompressCMVFrame(ARGBPixel** pBitsArr, const int* PitsArr, byte* const fr
     for(uint i = 0; i < DCValCnt; ++i)
     {
         uint length = Search(bh, root, 16);
-
         int num = bh.get_num(length);
 
         if(num < (1 << (length - 1)))
             num -= (1 << length) - 1;
-
-        dcValTmp[i] = static_cast<short>(num);
         if(i != 0)
-            dcValTmp[i] = static_cast<short>(num + dcValTmp[i - 1]);
+            num += dcTmp[i - 1];
+        dcTmp[i] = static_cast<short>(num);
     }
 
     bh.resetRead(reinterpret_cast<int *>(lpCurData + lpintData[7]));//section_2 scan of AC values
 
     root = MakeTree(16, freq_ac);
 
-    short* pdcValTmp = dcValTmp;
+    short* pdcValTmp = dcTmp;
     if(hasExSection && BCUCount)
     {
         //Executes when have extra block and flag!=0
@@ -679,8 +685,9 @@ void decompressCMVFrame(ARGBPixel** pBitsArr, const int* PitsArr, byte* const fr
                         {
                             int length = Search(bh, root, 16);
 
-                            if(length == 0xF)//在此之后系数全为0？
+                            if(length == 0xF)//在此之后系数全为0
                                 break;
+
                             if(length)
                             {
                                 int coefficient = bh.get_num(length);//get Coefficient
@@ -732,10 +739,12 @@ void decompressCMVFrame(ARGBPixel** pBitsArr, const int* PitsArr, byte* const fr
                     //Cr
                     DCT(Pix[2][0][0]);
 
-                    //这里除了进行色彩空间转换之外，还拷贝到了目标区域
                     cutM64Arrs(Pix[2][0][0], Pix[1][0][1], 16);
+
+                    //这里除了进行色彩空间转换之外，还拷贝到了目标区域
                     //             写入的地址             写入的大小          源
                     ycbcrToRGB(unit + unitTmp, unitSize, Pix[0][0][0]);
+
                     unitTmp += 64;
                     /* MCU Cb, Cr;
                     cutM64Arrs(Pix[1][0][0], Cb, 16);
@@ -955,6 +964,7 @@ int write_png_file(const char *file_name , ARGBPixel* *unitBuff, uint height, ui
     png_write_end(png_ptr, nullptr);
 
     /* cleanup heap allocation */
+    png_destroy_write_struct(&png_ptr, &info_ptr);
     for (uint j=0; j<height; j++)
         free(row_pointers[j]);
     free(row_pointers);
@@ -963,31 +973,11 @@ int write_png_file(const char *file_name , ARGBPixel* *unitBuff, uint height, ui
     return 0;
 }
 
-bool writeCMVFramesAVI(std::ifstream &cmvFile, cmvVideo* cmv, const std::string& outFilename)
+bool writeCMVFramesAVI(std::ifstream &cmvFile, cmvVideo* cmv, const std::string& outFilename, int *Pitch, ARGBPixel**pBits, short* bimage, BMPImage& image)
 {
     byte* frame = nullptr;
-    int* Pitch = nullptr;
 
     uint uWidth = (cmv->head.frame_width + 255) / 256;
-    uint uHeight = (cmv->head.frame_height + 255) / 256;
-    uint uCount = uWidth * uHeight;
-
-    Pitch = new int[uCount]{0 };
-    auto pBits = new ARGBPixel*[uCount]{};
-
-    //分配需要的内存
-    auto bimage = new short[uCount * 0x30000];
-    for(int i = 0; i < uCount; i++){
-        //struct of D3DLOCKED_RECT
-        Pitch[i] = 0x400;                       //256(长) * 4(通道)
-        pBits[i] = new ARGBPixel[0x10000]{};    //4(通道) * 256(长) * 256(宽)
-    }
-    BMPImage image;
-    image.height = cmv->head.frame_height;
-    image.width = cmv->head.frame_width;
-    image.blockHeight = (cmv->head.frame_height + 7) / 8;
-    image.blockWidth = (cmv->head.frame_width + 7) / 8;
-    image.blocks = new Block[image.blockHeight * image.blockWidth];
 
     std::vector<int> frameSizes;
     frameSizes.reserve(0x64000);
@@ -997,18 +987,19 @@ bool writeCMVFramesAVI(std::ifstream &cmvFile, cmvVideo* cmv, const std::string&
     writeAVI(ot, image.width, image.height, 24, cmv->head.cmv_frame_count, 1);
     int startVal = 0;
 
-#ifdef debug
-    startVal = 203;
-#endif
     std::vector<byte> jpgBuff;
     jpgBuff.reserve(0x64000);
+
     long long fstart = cmv->head.cmv_frame_start_offset;
-    for(int i = startVal; i <= cmv->head.cmv_frame_count; ++i){
+    for(int i = startVal; i <= cmv->head.cmv_frame_count; ++i)
+    {
         frame = new byte[cmv->index[i].cmv_frame_size];
         cmvFile.seekg(fstart + cmv->index[i].offset, std::ios::beg);
         cmvFile.read(reinterpret_cast<char *>(frame), cmv->index[i].cmv_frame_size);
-        if(cmv->index[i].frame_type!=2){
-            if(cmv->index[i].cmv_frame_size == cmv->index[i].cmv_original_frame_size){
+        if(cmv->index[i].frame_type!=2)
+        {
+            if(cmv->index[i].cmv_frame_size == cmv->index[i].cmv_original_frame_size)
+            {
                 std::cout << "Found sound frame at " << i << " ." << std::endl;
                 const std::size_t pos = outFilename.find_last_of('.');
                 const std::string outsFilename = (pos == std::string::npos) ? (outFilename + ".ogg") : (outFilename.substr(0, pos) + ".ogg");
@@ -1016,7 +1007,8 @@ bool writeCMVFramesAVI(std::ifstream &cmvFile, cmvVideo* cmv, const std::string&
                 so.write(reinterpret_cast<const char *>(frame), cmv->index[i].cmv_frame_size);
                 so.close();
                 continue;
-            }else{
+            }else
+            {
                 std::cout << "Unknown frame type: " << cmv->index[i].frame_type << std::endl;
                 continue;
             }
@@ -1025,12 +1017,12 @@ bool writeCMVFramesAVI(std::ifstream &cmvFile, cmvVideo* cmv, const std::string&
         //解压
         decompressCMVFrame(pBits, Pitch, frame, cmv->index[i].cmv_frame_size, 0);
         delete[] frame;
+
         fConvert(cmv->head.frame_height, cmv->head.frame_width, bimage, pBits, &image, uWidth);
 
         //转换为jpg
         //如果要编码成mjpg那还再转换色彩空间干啥，直接dct不就好了(
-        //RGBToYCbCr(image);
-
+        RGBToYCbCr(image);
         forwardDCT(image);
         quantize(image);
         writeJPG(image, jpgBuff);
@@ -1047,22 +1039,13 @@ bool writeCMVFramesAVI(std::ifstream &cmvFile, cmvVideo* cmv, const std::string&
     writeEnd(ot, frameSizes);
     ot.close();
 
-    delete[] image.blocks;
-    delete[] bimage;
-    delete[] Pitch;
-    for(int i = 0; i < uCount; ++i)
-        delete[] pBits[i];
-    delete[] pBits;
     return true;
 }
 
-bool writeCMVFrame(std::ifstream &cmvFile, cmvVideo* cmv, const std::string& outFilename, uint frameIndex)
+void AnalSingleJBPFrame()
 {
-    long long fstart = cmv->head.cmv_frame_start_offset;
-    auto thisFrame = cmv->index[frameIndex];
-
-    uint uWidth = (cmv->head.frame_width + 255) / 256;
-    uint uHeight = (cmv->head.frame_height + 255) / 256;
+    uint uWidth = (1280 + 255) / 256;
+    uint uHeight = (720 + 255) / 256;
     uint uCount = uWidth * uHeight;
 
     int* Pitch = new int[uCount];;
@@ -1073,6 +1056,36 @@ bool writeCMVFrame(std::ifstream &cmvFile, cmvVideo* cmv, const std::string& out
         Pitch[i] = 0x400;                        //256(长) * 4(通道)
         pBits[i] = new ARGBPixel[0x10000]{};     //256(长) * 256(宽) * 4(通道)
     }
+
+    std::ifstream fin(R"(E:\vmvt\op\0000251.png.out)", std::ios::binary);
+    fin.seekg(0, std::ios::end);
+    uint fsize = fin.tellg();
+    byte* frame = new byte[fsize];
+    fin.seekg(0, std::ios::beg);
+    fin.read(reinterpret_cast<char *>(frame), fsize);
+
+    FILE* stream1;
+    freopen_s(&stream1, R"(E:\vmvt\op\test1_3.txt)", "w", stdout);
+
+    //解压
+    decompressCMVFrame(pBits, Pitch, frame, fsize, 0);
+    delete[] frame;
+    //YCC2RGB(cmv->head.frame_height, cmv->head.frame_width, pBits, uWidth);
+
+    write_png_file(R"(E:\vmvt\op\testout.png)", pBits, 720, 1280, uWidth);
+
+    delete[] Pitch;
+    for(int i = 0; i < uCount; ++i)
+        delete[] pBits[i];
+    delete[] pBits;
+}
+
+bool writeCMVFrame(std::ifstream &cmvFile, cmvVideo* cmv, const std::string& outFilename, uint frameIndex, int *Pitch, ARGBPixel**pBits)
+{
+    long long fstart = cmv->head.cmv_frame_start_offset;
+    auto thisFrame = cmv->index[frameIndex];
+
+    uint uWidth = (cmv->head.frame_width + 255) / 256;
 
     byte* frame = new byte[thisFrame.cmv_frame_size];
     cmvFile.seekg(fstart + thisFrame.offset, std::ios::beg);
@@ -1098,23 +1111,19 @@ bool writeCMVFrame(std::ifstream &cmvFile, cmvVideo* cmv, const std::string& out
     //解压
     decompressCMVFrame(pBits, Pitch, frame, thisFrame.cmv_frame_size, 0);
     delete[] frame;
-    YCC2RGB(cmv->head.frame_height, cmv->head.frame_width, pBits, uWidth);
+    //YCC2RGB(cmv->head.frame_height, cmv->head.frame_width, pBits, uWidth);
 
     write_png_file(outFilename.c_str(), pBits, cmv->head.frame_height, cmv->head.frame_width, uWidth);
 
-    delete[] Pitch;
-    for(int i = 0; i < uCount; ++i)
-        delete[] pBits[i];
-    delete[] pBits;
     return true;
 }
-char ftemp[260]{};
-bool writeCMVFramesPNG(std::ifstream &cmvFile, cmvVideo* cmv, const std::string& outFilename)
-{
 
+static char ftemp[260]{};
+bool writeCMVFramesPNG(std::ifstream &cmvFile, cmvVideo* cmv, const std::string& outFilename, int *Pitch, ARGBPixel**pBits)
+{
     for(int i = 0; i <= cmv->head.cmv_frame_count; ++i){
         sprintf(ftemp, "%s\\%08d.png", outFilename.c_str(), i);
-        if(!writeCMVFrame(cmvFile, cmv, ftemp, i))
+        if(!writeCMVFrame(cmvFile, cmv, ftemp, i, Pitch, pBits))
             return false;
         std::cout<<"Converted " << i << '/' << cmv->head.cmv_frame_count << " frame.." << std::endl;
     }
@@ -1130,13 +1139,18 @@ void CreateFolder(const char* folderName)
     }
 }
 
-int main(int argc, char** argv){
-    if(argc < 2){
-        std::cout << "Pkuism : 2022/7/20\nCMV Video decoder\n\nUsage: CMVDecode.exe [video.cmv] [mode=video]" << std::endl;
+int main(int argc, char** argv)
+{
+    //AnalSingleJBPFrame();
+    //exit(0);
+    if(argc < 2)
+    {
+        std::cout << "Pkuism : 2022/9/20\nCMV Video decoder\n\nUsage: CMVDecode.exe [video.cmv] [mode=video]" << std::endl;
         return 0;
     }
     char mode = 'v';
-    if(argc >= 3){
+    if(argc >= 3)
+    {
         mode = argv[2][0];
     }
     const std::string filename(argv[1]);
@@ -1145,20 +1159,45 @@ int main(int argc, char** argv){
     {
         cmvVideo video{};
         in.read(reinterpret_cast<char *>(&video.head), sizeof(cmv_head));
-        if(video.head.magic[0] == 'C' && video.head.magic[1] == 'M' && video.head.magic[2] == 'V'){
+        if(video.head.magic[0] == 'C' && video.head.magic[1] == 'M' && video.head.magic[2] == 'V')
+        {
             std::cout << "Resolution: " << video.head.frame_width << 'x' << video.head.frame_height << '\n';
             std::cout << "Total frames: " << video.head.cmv_frame_count << std::endl;
             video.index = reinterpret_cast<cmv_frame_index *>(malloc((video.head.cmv_frame_count+1) * sizeof(cmv_frame_index)));
             in.read(reinterpret_cast<char *>(video.index), (video.head.cmv_frame_count+1) * sizeof(cmv_frame_index));
 
             const std::size_t pos = filename.find_last_of('.');
+
+            uint uWidth = (video.head.frame_width + 255) / 256;
+            uint uHeight = (video.head.frame_height + 255) / 256;
+            uint uCount = uWidth * uHeight;
+            int* Pitch = new int[uCount];;
+            auto pBits = new ARGBPixel*[uCount];
+            for(int i = 0; i < uCount; i++)
+            {
+                //struct of D3DLOCKED_RECT
+                Pitch[i] = 0x400;                        //256(长) * 4(通道)
+                pBits[i] = new ARGBPixel[0x10000]{};     //256(长) * 256(宽) * 4(通道)
+            }
+
             if(mode == 'v')
             {
                 std::cout << "Video Mode" << std::endl;
                 const std::string outFilename = (pos == std::string::npos) ? (filename + ".avi") : (filename.substr(0, pos) + ".avi");
-                if(!writeCMVFramesAVI(in, &video, outFilename))
+
+                auto bimage = new short[uCount * 0x30000];
+                BMPImage image;
+                image.height = video.head.frame_height;
+                image.width = video.head.frame_width;
+                image.blockHeight = (video.head.frame_height + 7) / 8;
+                image.blockWidth = (video.head.frame_width + 7) / 8;
+                image.blocks = new Block[image.blockHeight * image.blockWidth];
+
+                if(!writeCMVFramesAVI(in, &video, outFilename, Pitch, pBits, bimage, image))
                     std::cout << "Error occurs when try to extract frame data." << std::endl;
-                return 0;
+
+                delete[] image.blocks;
+                delete[] bimage;
             }else if(mode == 'p')
             {
                 const std::string outFilename = (pos == std::string::npos) ? (filename) : (filename.substr(0, pos));
@@ -1166,21 +1205,23 @@ int main(int argc, char** argv){
                 if(argc < 4)
                 {
                     std::cout << "PNG Mode" << std::endl;
-                    if(!writeCMVFramesPNG(in, &video, outFilename))
+                    if(!writeCMVFramesPNG(in, &video, outFilename, Pitch, pBits))
                         std::cout << "Error occurs when try to extract frame data." << std::endl;
-                    return 0;
                 }else
                 {
                     std::cout << "PNG SingleFrame Mode\n";
                     auto index = strtol(argv[3], nullptr, 10);
                     sprintf(ftemp, "%s\\%08d.png", outFilename.c_str(), index);
-                    if(!writeCMVFrame(in, &video, ftemp, index))
+                    if(!writeCMVFrame(in, &video, ftemp, index, Pitch, pBits))
                         std::cout << "Error occurs when try to extract frame data.\n";
                     std::cout << "Converted " << index << " th frame.\n";
-                    //std::cout<<copyTimes;
-                    return 0;
                 }
             }
+
+            delete[] Pitch;
+            for(int i = 0; i < uCount; ++i)
+                delete[] pBits[i];
+            delete[] pBits;
         }
     }
     else
